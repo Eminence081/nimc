@@ -41,6 +41,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;  /* pushes menu+logo left, button right */
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
   /* Left side of header: menu icon + logo + title text, grouped together */
@@ -251,6 +253,26 @@
     color: #7C867F;
   }
 
+@media (max-width: 480px) {
+  .logo-circle {
+    width: 56px;
+    height: 56px;
+  }
+  .header-text h1 {
+    font-size: 14px !important;
+  }
+  .header-text p {
+    font-size: 11px !important;
+  }
+  .search-wrap {
+    margin-top: 24px;
+    padding: 0 16px;
+  }
+  .results-list {
+    gap: 16px;
+    padding: 0 16px;
+  }
+}
 </style>
 </head>
 <body>
