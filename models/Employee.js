@@ -51,6 +51,14 @@ const employeeSchema = new mongoose.Schema({
     photoUrl: {
         type: String,
         default: ""
+    },
+
+    // Cloudinary's identifier for the uploaded photo -- needed so we can
+    // properly delete the old photo from Cloudinary when it's replaced
+    // or when the employee record itself is deleted
+    photoPublicId: {
+        type: String,
+        default: ""
     }
 
 }, {
