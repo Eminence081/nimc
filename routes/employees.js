@@ -1,27 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
 
 const Employee = require("../models/Employee");
 const verifyToken = require("../middleware/auth");
-const cloudinary = require("../config/cloudinary");
 
 
-// ---------- Multer setup: photos now upload straight to Cloudinary ----------
-// instead of being written to local disk, so they survive redeploys/restarts.
-
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-        folder: "nimc-employees",          // groups all uploads in one Cloudinary folder
-        allowed_formats: ["jpg", "jpeg", "png", "webp"],
-        transformation: [{ width: 500, height: 500, crop: "limit" }] // caps size, saves storage
-    }
-});
+// ---------- Multer setup: photos are kept in memory, not written to disk ----------
+// Vercel's filesystem is read-only/ephemeral in production, so we can't save
+// uploaded files the way disk storage normally would. Instead we convert the
+// upload to a base64 data URL and store it directly on the employee document.
 
 const upload = multer({
-    storage: storage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: function (req, file, cb) {
         if (file.mimetype.startsWith("image/")) {
@@ -32,6 +23,11 @@ const upload = multer({
     }
 });
 
+function fileToDataUrl(file) {
+    if (!file) return null;
+    return `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+}
+
 
 // Register employee (now accepts multipart/form-data with an optional photo)
 router.post("/register", upload.single("photo"), async (req, res) => {
@@ -40,11 +36,10 @@ router.post("/register", upload.single("photo"), async (req, res) => {
 
         const employeeData = { ...req.body };
 
-        // multer-storage-cloudinary puts the hosted photo's URL on req.file.path
-        // and its Cloudinary identifier (needed later for deletion) on req.file.filename
+        // multer keeps the uploaded file in memory; convert it to a base64
+        // data URL and store it directly on the document
         if (req.file) {
-            employeeData.photoUrl = req.file.path;
-            employeeData.photoPublicId = req.file.filename;
+            employeeData.photoUrl = fileToDataUrl(req.file);
         }
 
         // workDays arrives as individual form fields when sent via FormData,
@@ -172,13 +167,7 @@ router.put("/:id", verifyToken, upload.single("photo"), async (req, res) => {
         // Only replace the photo if a new one was actually uploaded;
         // otherwise leave the existing photoUrl alone
         if (req.file) {
-            // Delete the old photo from Cloudinary (not local disk) so old
-            // uploads don't pile up in your Cloudinary account
-            if (employee.photoPublicId) {
-                cloudinary.uploader.destroy(employee.photoPublicId).catch(() => {}); // ignore errors
-            }
-            updates.photoUrl = req.file.path;
-            updates.photoPublicId = req.file.filename;
+            updates.photoUrl = fileToDataUrl(req.file);
         }
 
         const updatedEmployee = await Employee.findByIdAndUpdate(
@@ -228,11 +217,6 @@ router.delete("/:id", verifyToken, async (req, res) => {
             return res.status(404).json({
                 message: "Employee not found"
             });
-        }
-
-        // Clean up their Cloudinary photo too, if they had one
-        if (employee.photoPublicId) {
-            cloudinary.uploader.destroy(employee.photoPublicId).catch(() => {}); // ignore errors
         }
 
         res.json({
